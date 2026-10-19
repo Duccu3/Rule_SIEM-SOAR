@@ -1,0 +1,34 @@
+index=windows sourcetype="XmlWinEventLog"
+EventCode=4625 
+LogonType=3 OR LogonType=10
+| where isnotnull(user)
+    AND user!="-"
+    AND user!=""
+    AND user!="ANONYMOUS LOGON"
+    AND NOT like(user,"%$")
+| eval event_type=if(EventCode=4625,"FAILED","SUCCESS")
+| bin _time span=1m
+| stats
+    count(eval(event_type="FAILED")) as failure_count
+    dc(eval(if(event_type="FAILED",user,null()))) as unique_users
+    values(eval(if(event_type="FAILED",user,null()))) as attempted_users
+    by _time src_ip host
+| where failure_count>=5 AND unique_users>=3
+| eval alert_id=md5("LAB-T1110.003|".src_ip."|".host."|".tostring(_time))
+| eval detection_id="LAB-T1110.003"
+| eval rule_name="Password Spraying - SMB Domain"
+| eval severity=case(
+    success_count>=1,"high",
+    failure_count>=10 OR unique_users>=5,"high",
+    true(),"medium"
+)
+| eval mitre_technique="T1110.003"
+| eval event_time=strftime(_time,"%Y-%m-%dT%H:%M:%S%z")
+| eval attempted_users=mvjoin(attempted_users,", ")
+| eval succeeded_users=mvjoin(succeeded_users,", ")
+| sort 0 - _time
+| head 1
+| table event_time alert_id detection_id rule_name severity
+    mitre_technique src_ip host
+    failure_count  unique_users
+    attempted_users 
