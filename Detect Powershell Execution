@@ -1,0 +1,26 @@
+index=sysmon sourcetype="xmlwineventlog"  EventCode=1 
+| eval image=lower(Image) 
+| eval parent=lower(ParentImage) 
+| eval cmd=lower(CommandLine) 
+| eval pcmd=lower(ParentCommandLine) 
+| where like(image, "%\\powershell.exe") 
+| where like(parent, "%\\cmd.exe") OR like(parent, 
+"%\\wmiprvse.exe") 
+| where like(pcmd, "%cmd.exe /q /c%") OR like(parent, 
+"%\\wmiprvse.exe") 
+| where ( 
+like(cmd, "%iex%") 
+OR like(cmd, "%downloadstring%") 
+OR like(cmd, "%webclient%") 
+OR like(cmd, "%invoke-mimikatz%") 
+OR like(cmd, "%dumpcreds%") 
+OR like(cmd, "%set-mppreference%") 
+) 
+| table _time host User ParentImage ParentCommandLine Image 
+CommandLine
+| eval kb2_priority=if(
+    match(lower(CommandLine),
+          "downloadstring|invoke-mimikatz|dumpcreds"),
+    0,1)
+| sort 0 kb2_priority - _time
+| fields - kb2_priority
